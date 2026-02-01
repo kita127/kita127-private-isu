@@ -1,6 +1,9 @@
 .PHONY: init
-init: webapp/sql/dump.sql.bz2 benchmarker/userdata/img
-	make php
+init: webapp/sql/dump.sql benchmarker/userdata/img
+
+webapp/sql/dump.sql: webapp/sql/dump.sql.bz2
+	cd webapp/sql && \
+	bunzip2 dump.sql.bz2
 
 webapp/sql/dump.sql.bz2:
 	cd webapp/sql && \
@@ -16,7 +19,7 @@ benchmarker/userdata/img: benchmarker/userdata/img.zip
 
 
 # PHP用の追加設定をする
-php:
+php-init:
 	cd ./webapp && \
 	docker compose down && \
 	mv ./etc/nginx/conf.d/default.conf ./etc/nginx/conf.d/default.conf.org && \
