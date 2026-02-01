@@ -1,5 +1,6 @@
 .PHONY: init
 init: webapp/sql/dump.sql.bz2 benchmarker/userdata/img
+	make php
 
 webapp/sql/dump.sql.bz2:
 	cd webapp/sql && \
