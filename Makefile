@@ -12,3 +12,12 @@ benchmarker/userdata/img.zip:
 benchmarker/userdata/img: benchmarker/userdata/img.zip
 	cd benchmarker/userdata && \
 	unzip -qq -o img.zip
+
+
+# PHP用の追加設定をする
+php:
+	cd ./webapp && \
+	docker compose down && \
+	mv ./etc/nginx/conf.d/default.conf ./etc/nginx/conf.d/default.conf.org && \
+	mv ./etc/nginx/conf.d/php.conf.org ./etc/nginx/conf.d/php.conf && \
+	docker compose up --build
