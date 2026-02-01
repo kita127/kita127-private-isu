@@ -12,6 +12,8 @@ make init
 2. PHP用の初期設定
 3. Docker起動
 
+## 本来のREADME
+
 「[ISUCON](https://isucon.net)」は、LINE株式会社の商標または登録商標です。
 
 本リポジトリが書籍の題材になりました。詳しくは以下のURLをご覧ください。
