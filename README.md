@@ -9,6 +9,11 @@ make init
 ```
 
 1. DBの初期データなどのコピー
+
+```
+make php-init
+```
+
 2. PHP用の初期設定
 3. Docker起動
 
