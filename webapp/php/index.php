@@ -132,31 +132,90 @@ $container->set('helper', function ($c) {
             $all_comments = $options['all_comments'];
 
             $posts = [];
+            $post_ids = [];
+            $user_ids = [];
+
             foreach ($results as $post) {
-                $post['comment_count'] = $this->fetch_first('SELECT COUNT(*) AS `count` FROM `comments` WHERE `post_id` = ?', $post['id'])['count'];
-                $query = 'SELECT * FROM `comments` WHERE `post_id` = ? ORDER BY `created_at` DESC';
-                if (!$all_comments) {
-                    $query .= ' LIMIT 3';
+                $posts[$post['id']] = $post;
+                $post_ids[] = $post['id'];
+                $user_ids[] = $post['user_id'];
+            }
+
+            if (empty($post_ids)) {
+                return [];
+            }
+
+            $placeholder_post_ids = implode(',', array_fill(0, count($post_ids), '?'));
+
+            // コメント数をまとめて取得
+            $comment_counts = [];
+            $ps = $this->db()->prepare("SELECT post_id, COUNT(*) AS count FROM `comments` WHERE `post_id` IN ({$placeholder_post_ids}) GROUP BY post_id");
+            $ps->execute($post_ids);
+            foreach ($ps->fetchAll(PDO::FETCH_ASSOC) as $row) {
+                $comment_counts[$row['post_id']] = $row['count'];
+            }
+            $ps->closeCursor();
+
+            // コメントとコメントユーザーをまとめて取得
+            $comments_data = [];
+            $comment_user_ids = [];
+            $query = "SELECT comments.*, users.id AS user_id_from_join, users.account_name, users.del_flg, users.authority FROM `comments` LEFT JOIN `users` ON comments.user_id = users.id WHERE comments.`post_id` IN ({$placeholder_post_ids}) ORDER BY comments.`created_at` DESC";
+            if (!$all_comments) {
+                // 各投稿の最新3件に限定するのはSQLでは難しいため、PHP側で処理
+                // より効率的な方法があれば検討する
+            }
+            $ps = $this->db()->prepare($query);
+            $ps->execute($post_ids);
+            foreach ($ps->fetchAll(PDO::FETCH_ASSOC) as $comment) {
+                $comments_data[$comment['post_id']][] = $comment;
+                $comment_user_ids[] = $comment['user_id'];
+            }
+            $ps->closeCursor();
+
+            // 投稿ユーザーをまとめて取得
+            $all_user_ids = array_unique(array_merge($user_ids, $comment_user_ids));
+            $users_data = [];
+            if (!empty($all_user_ids)) {
+                $placeholder_user_ids = implode(',', array_fill(0, count($all_user_ids), '?'));
+                $ps = $this->db()->prepare("SELECT * FROM `users` WHERE `id` IN ({$placeholder_user_ids})");
+                $ps->execute($all_user_ids);
+                foreach ($ps->fetchAll(PDO::FETCH_ASSOC) as $user) {
+                    $users_data[$user['id']] = $user;
+                }
+                $ps->closeCursor();
+            }
+
+            $final_posts = [];
+            $post_count = 0;
+            foreach ($results as $original_post) {
+                $post = $posts[$original_post['id']]; // 元の投稿データを取得
+
+                $post['comment_count'] = $comment_counts[$post['id']] ?? 0;
+
+                $post_comments = $comments_data[$post['id']] ?? [];
+                // N+1解消のために一旦全件取得しているので、ここで件数制限を行う
+                if (!$all_comments && count($post_comments) > 3) {
+                    $post_comments = array_slice($post_comments, 0, 3);
                 }
 
-                $ps = $this->db()->prepare($query);
-                $ps->execute([$post['id']]);
-                $comments = $ps->fetchAll(PDO::FETCH_ASSOC);
-                foreach ($comments as &$comment) {
-                    $comment['user'] = $this->fetch_first('SELECT * FROM `users` WHERE `id` = ?', $comment['user_id']);
+                foreach ($post_comments as &$comment) {
+                    $comment['user'] = $users_data[$comment['user_id']] ?? null;
                 }
-                unset($comment);
-                $post['comments'] = array_reverse($comments);
+                unset($comment); // 参照外し
+                $post['comments'] = array_reverse($post_comments);
 
-                $post['user'] = $this->fetch_first('SELECT * FROM `users` WHERE `id` = ?', $post['user_id']);
-                if ($post['user']['del_flg'] == 0) {
-                    $posts[] = $post;
+                $post['user'] = $users_data[$post['user_id']] ?? null;
+
+                if ($post['user'] && $post['user']['del_flg'] == 0) {
+                    $final_posts[] = $post;
+                    $post_count++;
                 }
-                if (count($posts) >= POSTS_PER_PAGE) {
+                if ($post_count >= POSTS_PER_PAGE) {
                     break;
                 }
             }
-            return $posts;
+
+            return $final_posts;
         }
 
     };
